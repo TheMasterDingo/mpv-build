@@ -40,10 +40,10 @@ spdif muxer.
 ---
   DOCS/man/ao.rst                |   26 +
   audio/out/ao.c                 |    5 +
-  audio/out/ao_mediafoundation.c | 1634 ++++++++++++++++++++++++++++++++
+  audio/out/ao_mediafoundation.c | 1652 ++++++++++++++++++++++++++++++++
   audio/out/ao_wasapi.c          |   11 +-
   meson.build                    |    9 +
-  5 files changed, 1684 insertions(+), 1 deletion(-)
+  5 files changed, 1702 insertions(+), 1 deletion(-)
 
 diff --git a/DOCS/man/ao.rst b/DOCS/man/ao.rst
 index 7eb7c97..30d9e32 100644
@@ -104,10 +104,10 @@ index e1007f4..ebde2c6 100644
      &audio_out_lavc,
 diff --git a/audio/out/ao_mediafoundation.c b/audio/out/ao_mediafoundation.c
 new file mode 100644
-index 0000000..955bdaf
+index 0000000..a48abbd
 --- /dev/null
 +++ b/audio/out/ao_mediafoundation.c
-@@ -0,0 +1,1634 @@
+@@ -0,0 +1,1652 @@
 +/*
 + * Dolby Digital Plus through the system decoder (Media Foundation)
 + *
@@ -418,6 +418,7 @@ index 0000000..955bdaf
 +    int num_tokens, tokens_cap;
 +
 +    bool live;                          // init is done: problems go to the player
++    bool played;                        // the clock ran: the stream worked here
 +    bool topology_ready, failed, reload_requested;
 +    bool events_done;                   // no session event will come any more
 +    HRESULT error;
@@ -538,6 +539,18 @@ index 0000000..955bdaf
 +    c->reload_requested = true;
 +    MP_VERBOSE(c->ao, "%s: reopening the output.\n", why);
 +    ao_request_reload(c->ao);
++}
++
++// The renderer reports trouble with its device. Once the stream has played,
++// that is a change to follow; before, reopening would meet the same trouble
++// again and again, so the track is decoded instead. Called with the lock held.
++static void device_trouble_locked(struct mf_core *c, const char *why)
++{
++    if (c->played) {
++        reload_locked(c, why);
++    } else {
++        fail_locked(c, why, MF_E_AUDIO_PLAYBACK_DEVICE_INVALIDATED);
++    }
 +}
 +
 +static void fail(struct ao *ao, const char *what, HRESULT hr)
@@ -1009,7 +1022,7 @@ index 0000000..955bdaf
 +            fail_locked(c, "The audio device was taken away",
 +                        FAILED(status) ? status : E_FAIL);
 +        } else if (device_event(type)) {
-+            reload_locked(c, "The renderer lost its device");
++            device_trouble_locked(c, "The renderer lost its device");
 +        } else if (FAILED(status) || type == MEError) {
 +            fail_locked(c, "The session failed", FAILED(status) ? status : E_FAIL);
 +        } else if (type == MESessionTopologyStatus) {
@@ -1684,7 +1697,12 @@ index 0000000..955bdaf
 +    if (now != p->last_clock) {
 +        p->last_clock = now;
 +        p->last_clock_change = wall;
-+        p->clock_moved |= now > 0;
++        if (now > 0 && !p->clock_moved) {
++            p->clock_moved = true;
++            AcquireSRWLockExclusive(&c->lock);
++            c->played = true;
++            ReleaseSRWLockExclusive(&c->lock);
++        }
 +    }
 +    double delay = written - now / 1e7;
 +    state->delay = MPMAX(delay, 0);
