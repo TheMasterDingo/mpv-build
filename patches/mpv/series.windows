@@ -4,3 +4,8 @@
 # Every group but android: a MediaCodec that starts failing mid-stream rarely
 # recovers, and waiting out its error burst only delays the software fallback.
 0025-vd-lavc-recover-hwdec-after-decode-error-burst.patch
+# TEST BRANCH ONLY. In the pull request 0244 sits in series.common; listed here
+# so that only the windows group goes stale. The windows tree is the same:
+# series.windows is applied right after series.common.
+0244-ao-let-an-output-report-that-it-cannot-play-its-passthrough-stream.patch
+0300-ao-mediafoundation-eac3-through-the-system-decoder.patch
